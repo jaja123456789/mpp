@@ -394,6 +394,15 @@ static MPP_RET h265e_proc_rc_cfg(MppEncRcCfg *dst, MppEncRcCfg *src)
         if (change & MPP_ENC_RC_CFG_CHANGE_GOP)
             dst->gop = src->gop;
 
+        if (change & MPP_ENC_RC_CFG_CHANGE_MAX_REENC)
+            dst->max_reenc_times = src->max_reenc_times;
+
+        if (change & MPP_ENC_RC_CFG_CHANGE_DROP_FRM) {
+            dst->drop_mode = src->drop_mode;
+            dst->drop_threshold = src->drop_threshold;
+            dst->drop_gap = src->drop_gap;
+        }
+
         // parameter checking
         if (dst->rc_mode >= MPP_ENC_RC_MODE_BUTT) {
             mpp_err("invalid rc mode %d should be RC_MODE_VBR or RC_MODE_CBR\n",
