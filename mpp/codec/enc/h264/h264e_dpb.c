@@ -25,6 +25,10 @@
 #include "h264e_dpb.h"
 #include "h264e_slice.h"
 
+#ifndef INT_MIN
+#define INT_MIN     (-2147483647 - 1) /* minimum (signed) int value */
+#endif
+
 void h264e_dpb_dump_frm(H264eDpb *dpb, const char *caller, RK_S32 line)
 {
     RK_S32 i = 0;
@@ -121,7 +125,6 @@ MPP_RET h264e_dpb_setup(H264eDpb *dpb, MppEncCfgSet* cfg, SynH264eSps *sps)
     dpb->total_cnt = info->dpb_size + 1;
     dpb->max_frm_num = 1 << log2_max_frm_num;
     dpb->max_poc_lsb = 1 << log2_max_poc_lsb;
-    dpb->poc_msb = (1 << log2_max_poc_lsb);
 
     h264e_dbg_dpb("max  ref frm num %d total slot %d\n",
                   ref_frm_num, dpb->total_cnt);
@@ -404,6 +407,13 @@ MPP_RET h264e_dpb_proc(H264eDpb *dpb, EncCpbStatus *cpb)
     EncFrmStatus *refr = &cpb->refr;
     EncFrmStatus *init = cpb->init;
     H264eDpbFrm *frames = dpb->frames;
+    H264eDpbFrm *dpb_curr = NULL;
+    H264eDpbFrm *dpb_refr = NULL;
+    RK_S32 max_frm_num = -1;
+    RK_S32 cur_frm_num = -1;
+    RK_S32 max_poc = INT_MIN;
+    RK_S32 cur_poc_lsb = INT_MIN;
+    RK_S32 cur_poc_msb = INT_MIN;
     RK_S32 used_size = 0;
     RK_S32 seq_idx = curr->seq_idx;
     RK_S32 i;
@@ -418,6 +428,8 @@ MPP_RET h264e_dpb_proc(H264eDpb *dpb, EncCpbStatus *cpb)
         dpb->used_size = 0;
         dpb->curr_max_lt_idx = 0;
         dpb->next_max_lt_idx = 0;
+        cur_poc_lsb = 0;
+        cur_poc_msb = 0;
     }
 
     if (h264e_debug & H264E_DBG_DPB)
@@ -427,9 +439,23 @@ MPP_RET h264e_dpb_proc(H264eDpb *dpb, EncCpbStatus *cpb)
      *    user defined cpb to hal slot index
      */
     for (i = 0; i < MAX_CPB_REFS; i++) {
-        dpb->map[i] = find_cpb_frame(frames, dpb->total_cnt, &init[i]);
-        if (dpb->map[i]) {
-            dpb->map[i]->on_used = 1;
+        H264eDpbFrm *frm = find_cpb_frame(frames, dpb->total_cnt, &init[i]);
+        dpb->map[i] = frm;
+        if (frm) {
+            frm->on_used = 1;
+            if (frm->frame_num >= max_frm_num) {
+                max_frm_num = frm->frame_num;
+                if (max_frm_num >= cur_frm_num) {
+                    cur_frm_num = max_frm_num;
+                    if (!frm->status.is_non_ref)
+                        cur_frm_num++;
+                }
+            }
+            if (frm->poc >= max_poc) {
+                max_poc = frm->poc;
+                cur_poc_lsb = frm->poc_lsb;
+                cur_poc_msb = frm->poc_msb;
+            }
             used_size++;
         }
     }
@@ -437,13 +463,13 @@ MPP_RET h264e_dpb_proc(H264eDpb *dpb, EncCpbStatus *cpb)
     mpp_assert(dpb->used_size == used_size);
     h264e_dbg_dpb("frm %d init cpb used size %d vs %d\n", seq_idx,
                   used_size, dpb->used_size);
+    h264e_dbg_dpb("frm %d frame_num max %d curr %d poc msb %d lsb %d\n", seq_idx,
+                  max_frm_num, cur_frm_num, cur_poc_msb, cur_poc_lsb);
 
     /* mark current cpb */
     RK_S32 found_curr = 0;
 
     /* 2. scan all slot for used map and find a slot for current */
-    dpb->curr = NULL;
-
     h264e_dbg_dpb("frm %d start finding slot for storage\n", seq_idx);
     for (i = 0; i < H264E_MAX_REFS_CNT + 1; i++) {
         H264eDpbFrm *p = &frames[i];
@@ -474,48 +500,46 @@ MPP_RET h264e_dpb_proc(H264eDpb *dpb, EncCpbStatus *cpb)
             continue;
         }
 
-        dpb->curr = p;
+        dpb_curr = p;
         p->status.val = curr->val;
         p->seq_idx = curr->seq_idx;
         if (curr->is_idr) {
             p->frame_num = 0;
             p->poc = 0;
-            dpb->last_poc_lsb = 0;
-            dpb->last_poc_msb = 0;
+            p->poc_lsb = 0;
+            p->poc_msb = 0;
         } else {
-            p->frame_num = dpb->last_frm_num;
-            p->poc = dpb->last_poc_lsb + dpb->last_poc_msb * dpb->poc_msb;
+            p->frame_num = (cur_frm_num >= dpb->max_frm_num) ? 0 : cur_frm_num;
+            p->poc_lsb = cur_poc_lsb + 2;
+            p->poc_msb = cur_poc_msb;
+            if (p->poc_lsb >= dpb->max_poc_lsb) {
+                p->poc_lsb = 0;
+                p->poc_msb++;
+            }
+            p->poc = p->poc_msb * dpb->max_poc_lsb + p->poc_lsb;
         }
         p->lt_idx = curr->lt_idx;
         p->on_used = 1;
-
-        dpb->last_frm_num = p->frame_num + !curr->is_non_ref;
-        if (dpb->last_frm_num >= dpb->max_frm_num)
-            dpb->last_frm_num = 0;
-
-        dpb->last_poc_lsb += 2;
-        if (dpb->last_poc_lsb >= dpb->max_poc_lsb) {
-            dpb->last_poc_lsb = 0;
-            dpb->last_poc_msb++;
-        }
 
         found_curr = 1;
         h264e_dbg_dpb("frm %d update slot %d with frame_num %d poc %d\n",
                       seq_idx, i, p->frame_num, p->poc);
     }
 
-    mpp_assert(dpb->curr);
-
-    if (NULL == dpb->curr)
+    if (NULL == dpb_curr)
         mpp_err_f("frm %d failed to find a slot for curr %d\n", seq_idx);
 
     h264e_dbg_dpb("frm %d start finding slot for refr %d\n", seq_idx, refr->seq_idx);
-    dpb->refr = find_cpb_frame(frames, dpb->total_cnt, refr);
-    if (NULL == dpb->refr)
-        dpb->refr = dpb->curr;
+
+    dpb_refr = find_cpb_frame(frames, dpb->total_cnt, refr);
+    if (NULL == dpb_refr)
+        dpb_refr = dpb_curr;
 
     h264e_dbg_dpb("frm %d curr %d refr %d start building list\n",
-                  seq_idx, dpb->curr->slot_idx, dpb->refr->slot_idx);
+                  seq_idx, dpb_curr->slot_idx, dpb_refr->slot_idx);
+
+    dpb->curr = dpb_curr;
+    dpb->refr = dpb_refr;
 
     h264e_dpb_build_list(dpb, cpb);
 

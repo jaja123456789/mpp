@@ -63,6 +63,8 @@ typedef struct  H264eDpbFrm_t {
     RK_S32              lt_idx;
     /* poc from H264eSlice */
     RK_S32              poc;
+    RK_S32              poc_lsb;
+    RK_S32              poc_msb;
     /* pts from input MppFrame */
     RK_S64              pts;
 } H264eDpbFrm;
@@ -93,10 +95,6 @@ typedef struct H264eDpb_t {
 
     RK_S32              max_frm_num;
     RK_S32              max_poc_lsb;
-    RK_S32              poc_msb;
-    RK_S32              last_frm_num;
-    RK_S32              last_poc_lsb;
-    RK_S32              last_poc_msb;
 
     H264eDpbFrm        *curr;
     H264eDpbFrm        *refr;
