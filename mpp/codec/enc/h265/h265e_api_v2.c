@@ -219,7 +219,11 @@ static MPP_RET h265e_proc_dpb(void *ctx, HalEncTask *task)
     EncRcTask    *rc_task = task->rc_task;
     EncCpbStatus *cpb = &task->rc_task->cpb;
     h265e_dbg_func("enter\n");
-
+    if (rc_task->frm.drop || rc_task->frm.force_pskip) {
+        h265e_dpb_recover(p->dpb, &p->dpb_bak);
+        if (rc_task->frm.drop)
+            return MPP_OK;
+    }
     h265e_dpb_bakup(p->dpb, &p->dpb_bak);
     h265e_dpb_get_curr(p->dpb);
     p->slice = p->dpb->curr->slice;
@@ -250,6 +254,26 @@ static MPP_RET h265e_proc_hal(void *ctx, HalEncTask *task)
     h265e_dbg_func("leave ctx %p \n", ctx);
     return MPP_OK;
 }
+
+static MPP_RET h265e_proc_enc_skip(void *ctx, HalEncTask *task)
+{
+    H265eCtx *p = (H265eCtx *)ctx;
+    MppPacket pkt = task->packet;
+    RK_U8 *ptr = mpp_packet_get_pos(pkt);
+    RK_U32 offset = mpp_packet_get_length(pkt);
+    RK_U32 len    = mpp_packet_get_size(pkt) - offset;
+    RK_U32 new_length = 0;
+    h265e_dbg_func("enter\n");
+    ptr += offset;
+    p->slice->m_sliceQp = task->rc_task->info.quality_target;
+    new_length = h265e_code_slice_skip_frame(ctx, p->slice, ptr, len);
+    task->length = new_length;
+    task->rc_task->info.bit_real = 8 * new_length;
+    ///mpp_packet_set_length(pkt, offset + new_length);
+    h265e_dbg_func("leave\n");
+    return MPP_OK;
+}
+
 
 static MPP_RET h265e_add_sei(MppPacket pkt, RK_S32 *length, RK_U8 uuid[16],
                              const void *data, RK_S32 size)
@@ -603,5 +627,5 @@ const EncImplApi api_h265e = {
     h265e_proc_dpb,
     h265e_proc_hal,
     h265e_add_sei,
-    NULL,
+    h265e_proc_enc_skip,
 };

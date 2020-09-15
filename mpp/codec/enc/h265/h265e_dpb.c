@@ -635,6 +635,18 @@ void h265e_dpb_free_unsed(H265eDpb *dpb, EncCpbStatus *cpb)
             frm->slice->is_referenced = 0;
         }
     }
+    if (cpb->curr.is_non_ref) {
+        H265eDpbFrm *frm;
+        frm = h265e_find_cpb_frame(dpb->frame_list, MAX_REFS, &cpb->curr);
+        if (frm) {
+            h265e_dbg_dpb("free curr unreference buf poc %d", frm->slice->poc);
+            frm->is_long_term = 0;
+            frm->used_by_cur = 0;
+            frm->on_used = 0;
+            frm->status.val = 0;
+            frm->slice->is_referenced = 0;
+        }
+    }
     h265e_dbg_func("leave\n");
 }
 

@@ -22,12 +22,30 @@
 #include "mpp_list.h"
 #include "h265e_dpb.h"
 #include "h265_syntax.h"
+#include "h265e_enctropy.h"
+#include "h265e_contx_table.h"
+
+#define MIN_PU_SIZE             4
+#define MIN_TU_SIZE             4
+#define MAX_NUM_SPU_W           (64 / MIN_PU_SIZE) // maximum number of SPU in horizontal line
+
 /*
  * For H.265 encoder slice header process.
  * Remove some syntax that encoder not supported.
  * Field, mbaff, B slice are not supported yet.
  */
 typedef struct  H265eDpbFrm_t       H265eDpbFrm;
+
+typedef struct DataCu {
+    RK_U8   m_cuSize[256];
+    RK_U8   m_cuDepth[256];
+    RK_U32  pixelX;
+    RK_U32  pixelY;
+    RK_U32  mb_w;
+    RK_U32  mb_h;
+    RK_U32  cur_addr;
+} DataCu_t;
+
 
 typedef struct H265eReferencePictureSet_e {
     RK_S32  m_deltaRIdxMinus1;
@@ -205,6 +223,7 @@ typedef struct H265eSps_e {
     RK_S32          m_log2DiffMaxMinCodingBlockSize;
     RK_U32          m_maxCUSize;
     RK_U32          m_maxCUDepth;
+    RK_U32          m_addCUDepth;
 
     H265eCropInfo   m_conformanceWindow;
 
@@ -260,6 +279,10 @@ typedef struct H265eSps_e {
     RK_S32          m_vuiParametersPresentFlag;
     H265eVuiInfo    vui;
     H265ePTL        *m_ptl;
+    uint32_t        zscan2raster[MAX_NUM_SPU_W * MAX_NUM_SPU_W];
+    uint32_t        raster2zscan[MAX_NUM_SPU_W * MAX_NUM_SPU_W];
+    uint32_t        raster2pelx[MAX_NUM_SPU_W * MAX_NUM_SPU_W];
+    uint32_t        raster2pely[MAX_NUM_SPU_W * MAX_NUM_SPU_W];
 } H265eSps;
 
 typedef struct H265ePps_e {
@@ -325,6 +348,9 @@ typedef struct H265eSlice_e {
     H265eReferencePictureSet m_localRPS;
     RK_S32         m_bdIdx;
     H265eRefPicListModification m_RefPicListModification;
+    H265eContextModel_t m_contextModels[MAX_OFF_CTX_MOD];
+    H265eCabacCtx_t     m_cabac;
+
     enum NALUnitType m_nalUnitType;       ///< Nal unit type for the slice
     SliceType        m_sliceType;
     RK_U32           m_IsGenB;
@@ -394,6 +420,7 @@ extern "C" {
 void h265e_slice_set_ref_list(H265eDpbFrm *frame_list, H265eSlice *slice);
 void h265e_slice_set_ref_poc_list(H265eSlice *slice);
 void h265e_slice_init(void *ctx, H265eSlice *slice, EncFrmStatus curr);
+RK_S32 h265e_code_slice_skip_frame(void *ctx, H265eSlice *slice, RK_U8 *buf, RK_S32 len);
 
 #ifdef __cplusplus
 }
