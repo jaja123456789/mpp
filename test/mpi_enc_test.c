@@ -545,6 +545,10 @@ MPP_RET test_mpp_enc_cfg_setup(MpiEncTestData *p)
     mpp_enc_cfg_set_s32(cfg, "rc:fps_out_denorm", p->fps_out_den);
     mpp_enc_cfg_set_s32(cfg, "rc:gop", p->gop_len ? p->gop_len : p->fps_out_num * 2);
 
+    mpp_enc_cfg_set_u32(cfg, "rc:drop_mode", MPP_ENC_RC_DROP_FRM_PSKIP);
+    mpp_enc_cfg_set_u32(cfg, "rc:drop_thd", 10);        /* 10% of max bps */
+    mpp_enc_cfg_set_u32(cfg, "rc:drop_gap", 1);
+
     /* setup codec  */
     mpp_enc_cfg_set_s32(cfg, "codec:type", p->type);
     switch (p->type) {
