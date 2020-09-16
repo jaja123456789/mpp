@@ -254,11 +254,14 @@ typedef struct H264eMarkingInfo_t {
 
 typedef struct H264eSlice_t {
     /* Copy of sps/pps parameter */
+    RK_S32      mb_w;
+    RK_S32      mb_h;
     RK_U32      max_num_ref_frames;
     RK_U32      entropy_coding_mode;
     RK_S32      log2_max_frame_num;
     RK_S32      log2_max_poc_lsb;
     RK_S32      pic_order_cnt_type;
+    RK_S32      qp_init;
 
     /* Nal parameters */
     RK_S32      nal_reference_idc;

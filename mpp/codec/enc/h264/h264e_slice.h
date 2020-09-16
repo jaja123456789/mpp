@@ -50,10 +50,12 @@ MPP_RET h264e_marking_rd_op(H264eMarkingInfo *info, H264eMmco *op);
 void h264e_slice_init(H264eSlice *slice, H264eReorderInfo *reorder,
                       H264eMarkingInfo *marking);
 RK_S32 h264e_slice_update(H264eSlice *slice, MppEncCfgSet *cfg,
-                          SynH264eSps *sps, H264eDpbFrm *frm);
+                          SynH264eSps *sps, SynH264ePps *pps,
+                          H264eDpbFrm *frm);
 
 RK_S32 h264e_slice_read(H264eSlice *slice, void *p, RK_S32 size);
 RK_S32 h264e_slice_write(H264eSlice *slice, void *p, RK_U32 size);
+RK_S32 h264e_slice_write_pskip(H264eSlice *slice, void *p, RK_U32 size);
 RK_S32 h264e_slice_move(RK_U8 *dst, RK_U8 *src, RK_S32 dst_bit, RK_S32 src_bit,
                         RK_S32 src_size);
 
